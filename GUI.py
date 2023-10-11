@@ -10,10 +10,12 @@
 import wx
 import wx.media
 import os
+import cv2
 
 class Panel1(wx.Panel):
     def __init__(self, parent, id):
         #self.log = log
+        
         wx.Panel.__init__(self, parent, -1, style=wx.TAB_TRAVERSAL|wx.CLIP_CHILDREN)
 
         # Create some controls
@@ -22,6 +24,7 @@ class Panel1(wx.Panel):
         except NotImplementedError:
             self.Destroy()
             raise
+
 
         loadButton = wx.Button(self, -1, "Load File")
         self.Bind(wx.EVT_BUTTON, self.onLoadFile, loadButton)
@@ -56,14 +59,50 @@ class Panel1(wx.Panel):
         sizer.Add(self.mc, (5,1), span=(5,1))  # for .avi .mpg video files
         self.SetSizer(sizer)
 
+        roiButton = wx.Button(self, -1, "Select ROI")
+        self.Bind(wx.EVT_BUTTON, self.onSelectROI, roiButton)
+        sizer.Add(roiButton, (5,2))
+
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.onTimer)
         self.timer.Start(100)
 
+    def onSelectROI(self, evt):
+        video_path = self.st_file.GetLabel()
+        print(video_path)
+        if video_path:
+            self.select_roi(video_path)
+        else:
+            wx.MessageBox("Please load a video file first.", "ERROR", wx.ICON_ERROR | wx.OK)
+
+    def select_roi(self, videopath):
+        vidcap = cv2.VideoCapture(videopath)
+        ret, frame = vidcap.read()
+
+        if not ret:
+            wx.MessageBox("Unable to read video frame.", "ERROR", wx.ICON_ERROR | wx.OK)
+            return
+
+        # select region of interest
+        fromcenter = False
+        showCrosshair = False
+        r = cv2.selectROI('select_nest', frame, fromcenter, showCrosshair)
+
+        # crop image
+        imCrop = frame[int(r[1]):int(r[1]+r[3]), int(r[0]):int(r[0]+r[2])]
+
+        # display cropped image
+        cv2.imshow('nest', imCrop)
+        cv2.waitKey(0)
+        vidcap.release()
+        cv2.destroyAllWindows()
+
+
+
     def onLoadFile(self, evt):
         dlg = wx.FileDialog(self, message="Choose a media file",
                             defaultDir=os.getcwd(), defaultFile="",
-                            style=wx.OPEN | wx.CHANGE_DIR )
+                            style=wx.FD_OPEN | wx.FD_CHANGE_DIR )
         if dlg.ShowModal() == wx.ID_OK:
             path = dlg.GetPath()
             self.doLoadFile(path)
@@ -74,8 +113,10 @@ class Panel1(wx.Panel):
             wx.MessageBox("Unable to load %s: Unsupported format?" % path, "ERROR", wx.ICON_ERROR | wx.OK)
         else:
             folder, filename = os.path.split(path)
-            self.st_file.SetLabel('%s' % filename)
-            self.mc.SetBestFittingSize()
+            self.st_file.SetLabel('%s' % path)
+            # self.st_file.SetLabel('%s' % filename)
+            # self.mc.SetBestFittingSize()
+            self.mc.GetBestVirtualSize()
             self.GetSizer().Layout()
             self.slider.SetRange(0, self.mc.Length())
             self.mc.Play()
